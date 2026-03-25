@@ -1,0 +1,52 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs / temp
+*.log
+logs/
+tmp/
+temp/
+
+# Python virtual environments & caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.python-version
+
+# Java / Gradle / Maven outputs
+.gradle/
+build/
+out/
+target/
+*.class
+
+# Terraform state and cache
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Node (future-proof)
+node_modules/
+
+# LocalStack / misc cache
+.localstack/
+.cache/
+
+# Intentionally NOT ignored: .env files

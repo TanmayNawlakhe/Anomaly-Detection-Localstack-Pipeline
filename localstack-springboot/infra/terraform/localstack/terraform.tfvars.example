@@ -1,0 +1,8 @@
+aws_region         = "us-east-1"
+aws_endpoint       = "http://localhost:4566"
+aws_access_key     = "test"
+aws_secret_key     = "test"
+metrics_table_name = "service_metrics_aggregated"
+anomaly_table_name = "anomaly_results"
+alert_topic_name   = "anomaly-alerts-topic"
+alert_queue_name   = "anomaly-alerts-queue"

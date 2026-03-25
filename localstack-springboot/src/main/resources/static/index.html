@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Anomaly Pipeline Console</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #0b1020; color: #f1f5f9; }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        .card { background: #111a33; border: 1px solid #2a365c; border-radius: 10px; padding: 14px; overflow: hidden; }
+        button { margin-right: 8px; margin-top: 8px; padding: 8px 12px; border-radius: 8px; border: none; cursor: pointer; }
+        .ok { background: #16a34a; color: white; }
+        .warn { background: #dc2626; color: white; }
+        .secondary { background: #2563eb; color: white; }
+        input, select { width: 100%; margin-top: 6px; margin-bottom: 10px; padding: 8px; border-radius: 6px; border: 1px solid #3b4f7d; background: #0f1730; color: #fff; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { border-bottom: 1px solid #2a365c; padding: 8px; text-align: left; }
+        .muted { color: #94a3b8; }
+        .full { grid-column: 1 / -1; }
+        .status-line { margin: 2px 0; color: #cbd5e1; }
+        .anomaly-row { cursor: pointer; }
+        .detail-row td { background: #0b1430; }
+        .detail-box { margin: 0; white-space: pre-wrap; font-size: 11px; color: #dbeafe; }
+        .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
+        .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; }
+        .kpi { background: #0f1730; border: 1px solid #2a365c; border-radius: 8px; padding: 10px; }
+        .kpi .label { color: #93c5fd; font-size: 12px; }
+        .kpi .value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+        .chart-panel { position: relative; width: 100%; height: 320px; min-height: 280px; }
+        .chart-panel canvas { width: 100% !important; height: 100% !important; display: block; }
+        @media (max-width: 1100px) {
+            .grid { grid-template-columns: 1fr; }
+            .charts { grid-template-columns: 1fr; }
+            .kpis { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<h2>Anomaly + LocalStack Pipeline Console</h2>
+<p class="muted">Realtime simulation + manual ingestion feeding the same detection pipeline.</p>
+
+<div class="grid">
+    <div class="card">
+        <h3>Simulation Controls</h3>
+        <div id="sim-status">Loading...</div>
+        <button class="ok" onclick="toggleSimulation('start')">Start Simulation</button>
+        <button class="warn" onclick="toggleSimulation('stop')">Stop Simulation</button>
+        <button class="secondary" onclick="resetSystem()">Reset Data + Fresh Start</button>
+    </div>
+
+    <div class="card">
+        <h3>Manual Metric Ingestion</h3>
+        <label>Client ID</label>
+        <input id="clientId" value="client_a@example.com" />
+        <label>Request Count</label>
+        <input id="requestCount" type="number" value="1200" />
+        <label>Error Count</label>
+        <input id="errorCount" type="number" value="10" />
+        <label>Avg Latency (ms)</label>
+        <input id="latency" type="number" value="92" />
+        <label>Metric Timestamp (optional future/past)</label>
+        <input id="metricTimestamp" type="datetime-local" />
+        <button class="ok" onclick="ingestManual()">Ingest</button>
+        <p id="ingest-result" class="muted"></p>
+    </div>
+
+    <div class="card full">
+        <h3>Realtime DynamoDB Metric Records (Aggregated)</h3>
+        <table>
+            <thead>
+            <tr><th>client_id</th><th>timeblock</th><th>request_count</th><th>error_count</th><th>avg_latency_ms</th></tr>
+            </thead>
+            <tbody id="raw-metrics-body"></tbody>
+        </table>
+    </div>
+
+    <div class="card full">
+        <h3>Recent Detected Anomalies</h3>
+        <p class="muted">Click a row to expand details.</p>
+        <table>
+            <thead>
+            <tr><th>Client</th><th>Timeblock</th><th>Type</th><th>Severity</th><th>Score</th><th>Threshold</th></tr>
+            </thead>
+            <tbody id="anomalies-body"></tbody>
+        </table>
+    </div>
+
+    <div class="card full">
+        <h3>SNS/SQS Simulated Email Deliveries</h3>
+        <p class="muted">These are local simulated deliveries consumed from SQS.</p>
+        <table>
+            <thead>
+            <tr><th>delivered_at</th><th>target</th><th>message</th></tr>
+            </thead>
+            <tbody id="notifications-body"></tbody>
+        </table>
+    </div>
+
+    <div class="card full">
+        <h3>Realtime Charts</h3>
+        <div class="kpis">
+            <div class="kpi"><div class="label">Total Aggregated Entries</div><div class="value" id="kpi-metrics">0</div></div>
+            <div class="kpi"><div class="label">Total Anomaly Entries</div><div class="value" id="kpi-anomalies">0</div></div>
+            <div class="kpi"><div class="label">Anomalies in View</div><div class="value" id="kpi-anom-view">0</div></div>
+        </div>
+        <div class="charts" style="margin-top: 12px;">
+            <div class="chart-panel"><canvas id="severityChart"></canvas></div>
+            <div class="chart-panel"><canvas id="typeChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let severityChart;
+    let typeChart;
+    const anomalyDetailCache = new Map();
+
+    async function api(path, method = 'GET', body = null) {
+        const options = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body) options.body = JSON.stringify(body);
+        const response = await fetch(path, options);
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+    }
+
+    async function toggleSimulation(action) {
+        await api(`/api/v1/simulation/${action}`, 'POST');
+        await refresh();
+    }
+
+    async function ingestManual() {
+        const timestampInput = document.getElementById('metricTimestamp').value;
+        const timestamp = timestampInput ? new Date(timestampInput).toISOString() : new Date().toISOString();
+
+        const payload = {
+            metrics: [{
+                timestamp,
+                clientId: document.getElementById('clientId').value,
+                requestCount: Number(document.getElementById('requestCount').value),
+                errorCount: Number(document.getElementById('errorCount').value),
+                avgLatencyMs: Number(document.getElementById('latency').value)
+            }]
+        };
+
+        const result = await api('/api/v1/metrics/ingest', 'POST', payload);
+        document.getElementById('ingest-result').innerText = `Ingested: ${result.aggregated_records}`;
+        await refresh();
+    }
+
+    async function resetSystem() {
+        const result = await api('/api/v1/admin/reset', 'POST');
+        document.getElementById('ingest-result').innerText =
+            `Reset done. Deleted metrics=${result.deleted_metrics}, anomalies=${result.deleted_anomalies}`;
+        anomalyDetailCache.clear();
+        await refresh();
+    }
+
+    async function getAnomalyDetail(clientId, timeblock) {
+        const key = `${clientId}|${timeblock}`;
+        if (anomalyDetailCache.has(key)) {
+            return anomalyDetailCache.get(key);
+        }
+
+        const detail = await api(`/api/v1/dashboard/anomaly-detail?clientId=${encodeURIComponent(clientId)}&timeblock=${encodeURIComponent(timeblock)}`);
+        anomalyDetailCache.set(key, detail);
+        return detail;
+    }
+
+    function renderAnomalyTable(summary) {
+        const anomaliesBody = document.getElementById('anomalies-body');
+        anomaliesBody.innerHTML = '';
+
+        summary.latest_anomalies.forEach((row, index) => {
+            const mainRow = document.createElement('tr');
+            mainRow.className = 'anomaly-row';
+            mainRow.innerHTML = `<td>${row.clientId}</td><td>${row.timeblock}</td><td>${row.anomalyType}</td><td>${row.severity}</td><td>${Number(row.score).toFixed(4)}</td><td>${Number(row.threshold).toFixed(4)}</td>`;
+
+            const detailRow = document.createElement('tr');
+            detailRow.className = 'detail-row';
+            detailRow.style.display = 'none';
+
+            detailRow.innerHTML = `<td colspan="6"><pre class="detail-box">Loading details...</pre></td>`;
+
+            mainRow.addEventListener('click', async () => {
+                if (detailRow.style.display !== 'none') {
+                    detailRow.style.display = 'none';
+                    return;
+                }
+
+                detailRow.style.display = '';
+                const detailBox = detailRow.querySelector('.detail-box');
+                detailBox.textContent = 'Loading details...';
+
+                try {
+                    const detail = await getAnomalyDetail(row.clientId, row.timeblock);
+                    const detailPayload = {
+                        anomaly: row,
+                        matching_aggregated_metric: detail.matching_aggregated_metric || null
+                    };
+                    detailBox.textContent = JSON.stringify(detailPayload, null, 2);
+                } catch (error) {
+                    detailBox.textContent = JSON.stringify({
+                        anomaly: row,
+                        matching_aggregated_metric: null,
+                        error: String(error)
+                    }, null, 2);
+                }
+            });
+
+            anomaliesBody.appendChild(mainRow);
+            anomaliesBody.appendChild(detailRow);
+        });
+    }
+
+    function upsertPieChart(existingChart, canvasId, label, dataMap, palette) {
+        const labels = Object.keys(dataMap || {});
+        const values = labels.map(key => dataMap[key]);
+        const colors = labels.map((_, index) => palette[index % palette.length]);
+
+        if (!existingChart) {
+            const chart = new Chart(document.getElementById(canvasId), {
+                type: 'pie',
+                data: {
+                    labels,
+                    datasets: [{ label, data: values, backgroundColor: colors, borderColor: '#0f1730', borderWidth: 1 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'nearest', intersect: true },
+                    hover: { mode: 'nearest', intersect: true },
+                    plugins: { legend: { labels: { color: '#e2e8f0' } } }
+                }
+            });
+            return chart;
+        }
+
+        existingChart.data.labels = labels;
+        existingChart.data.datasets[0].data = values;
+        existingChart.data.datasets[0].backgroundColor = colors;
+        existingChart.update();
+        return existingChart;
+    }
+
+    async function refresh() {
+        const sim = await api('/api/v1/simulation/status');
+        const summary = await api('/api/v1/dashboard/summary');
+
+        document.getElementById('sim-status').innerHTML = `
+            <div class="status-line">Status: ${sim.enabled ? 'RUNNING' : 'STOPPED'}</div>
+            <div class="status-line">Seed clients: ${sim.seed_clients}</div>
+            <div class="status-line">Simulated time: ${sim.simulated_time}</div>
+            <div class="status-line">Current bucket: ${sim.current_bucket_start}</div>
+            <div class="status-line">Next bucket: ${sim.next_bucket_start}</div>
+            <div class="status-line">Next detection in: ${summary.buckets_until_next_detection}/${summary.detection_stride_buckets} buckets</div>
+            <div class="status-line">Last detection bucket: ${summary.last_detection_bucket}</div>
+            <div class="status-line">Latest observed bucket: ${summary.latest_observed_bucket}</div>
+        `;
+
+        const rawMetricsBody = document.getElementById('raw-metrics-body');
+        rawMetricsBody.innerHTML = '';
+        summary.latest_metrics_raw.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${row.client_id}</td><td>${row.timeblock}</td><td>${row.request_count}</td><td>${row.error_count}</td><td>${row.avg_latency_ms}</td>`;
+            rawMetricsBody.appendChild(tr);
+        });
+
+        renderAnomalyTable(summary);
+
+        const notificationsBody = document.getElementById('notifications-body');
+        notificationsBody.innerHTML = '';
+        (summary.simulated_notifications || []).forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${item.delivered_at || ''}</td><td>${item.target || ''}</td><td>${item.message || ''}</td>`;
+            notificationsBody.appendChild(tr);
+        });
+
+        document.getElementById('kpi-metrics').innerText = summary.total_metric_entries;
+        document.getElementById('kpi-anomalies').innerText = summary.total_anomaly_entries;
+        document.getElementById('kpi-anom-view').innerText = summary.latest_anomalies.length;
+
+        severityChart = upsertPieChart(severityChart, 'severityChart', 'Alerts by Severity', summary.anomalies_by_severity, ['#f59e0b', '#ef4444', '#facc15', '#22c55e', '#a78bfa']);
+        typeChart = upsertPieChart(typeChart, 'typeChart', 'Alerts by Type', summary.anomalies_by_type, ['#38bdf8', '#6366f1', '#14b8a6', '#f97316', '#ec4899']);
+    }
+
+    refresh();
+    setInterval(refresh, 5000);
+</script>
+</body>
+</html>

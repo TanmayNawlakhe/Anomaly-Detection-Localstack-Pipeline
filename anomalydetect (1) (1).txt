@@ -1,0 +1,71 @@
+1. From where to get the business/service metrics - i.e. the data stream/ DB schema, API, etc.
+
+2. Clarification - We will only load the frozen/pretrained model for inference in Lambda. While training will be done in local env..
+
+
+The current script/code for anomaly detection - 
+1. Uses a NYC Taxi dataset(CSV)  for training ..
+	| timestamp           | demand |
+	|---------------------|--------|
+	| 2014-07-01 00:00:00 | 10844  |
+	| 2014-07-01 01:00:00 |  8123  |
+	| ...                 |  ...   |
+Script doesn't save weighted or frozen model & anomaly thresholds 
+Trains data &  goes to inference.
+CSV(input dataset) is missing ..
+
+
+
+
+Tentative Plan : 
+---------------------------------------------------------------------------------
+
+1. Extracting the anomaly detection logic.
+Train 1 baseline model locally using the above logic, but for our metrics ..
+Saving the model/artifact..
+
+--------------------------------------------------------------------------------
+
+2. Aggregating usage data per client & storing in a cloud DB ( e.g. DynamoDB) in proper time-bucketed format ( normalization)  .
+[
+  	{
+	    	"Client": "client1@xyz.com",
+    	"timestamp": "2014-07-01 00:00:00",
+    	"count": 10844
+  	},
+  	{
+	    	"Client": "client2@xyz.com",
+    	"timestamp": "2014-07-01 01:00:00",
+    	"count": 8123
+  	}
+]
+
+3. Load model in Lambda ( as localstack lambda has a limit of 250 mb, we can use springboot scheduler function, and a scheduled job as eventbridge rule ) - 
+Scheduled using EventBridge - Pass windowed data( e.g. recent 24 hours) as input from DynamoDB  
+Inference handler function -  converting data from DB, to proper input format for model
+
+4. Getting results, classifying  & storing anomalies.
+Alerts for dev teams ( incase anomalies) - SNS/SES from aws
+-------------------------------------------------------------------------------------
+
+
+
+
+Service Events (Metrics)		
+	|
+Aggregation Lambdav (scheduled function) - Normalized events, groupby client, time bucket
+	|
+events stored in DynamoDB
+	|
+Anomaly detection Lambda(scheduled function)- Load model
+fetch windowed events ( daywise , monthwise) from DB, find usage patterns, run inference
+	|
+Store results in DB, Alerts, Anomaly analyis
+
+
+
+
+
+Terraform  - for handling dynamodb ( creation & aws infra configs )
+CloudWatch logs for logging
+SNS/SES aws services - for sending alerts

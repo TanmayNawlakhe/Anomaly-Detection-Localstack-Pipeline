@@ -1,0 +1,14 @@
+app:
+  aws:
+    endpoint: http://localstack:4566
+  anomaly:
+    aggregation-interval: PT1H
+    lookback-hours: 24
+    detection-stride-buckets: 24
+    simulation-fixed-delay-ms: 10000
+    simulation-enabled-by-default: false
+    pipeline-mode: statistical
+    simulation-anomaly-seed-file: /workspace/output/anomalies.json
+    model-dir: /workspace/models
+  scheduler:
+    fixed-delay-ms: 10000

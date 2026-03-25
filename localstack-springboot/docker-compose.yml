@@ -1,0 +1,72 @@
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: localstack-main
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,sns,sqs
+      - AWS_DEFAULT_REGION=us-east-1
+      - DEBUG=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "bash", "-c", "awslocal dynamodb list-tables"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  anomaly-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anomaly-localstack-app
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - APP_AWS_REGION=us-east-1
+      - APP_AWS_ACCESS_KEY=test
+      - APP_AWS_SECRET_KEY=test
+      - APP_AWS_ENDPOINT=http://localstack:4566
+      - APP_ANOMALY_PIPELINE_MODE=statistical
+      - APP_ANOMALY_SIMULATION_ANOMALY_SEED_FILE=/workspace/output/anomalies.json
+      - APP_ANOMALY_MODEL_DIR=/workspace/models
+      - APP_ANOMALY_SIMULATION_ENABLED_BY_DEFAULT=false
+      - ADMIN_ALERT_EMAIL=${ADMIN_ALERT_EMAIL:-admin@example.com}
+      - ALERT_CONSUMER_ENABLED=${ALERT_CONSUMER_ENABLED:-true}
+      - ALERT_CONSUMER_FIXED_DELAY_MS=${ALERT_CONSUMER_FIXED_DELAY_MS:-5000}
+    volumes:
+      - ../output:/workspace/output
+      - ../models:/workspace/models
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  autoencoder-worker:
+    image: python:3.11-slim
+    container_name: anomaly-autoencoder-worker
+    working_dir: /workspace
+    command: sh -c "pip install --no-cache-dir -r python/requirements.txt && python python/run_worker.py"
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - METRICS_TABLE=service_metrics_aggregated
+      - ANOMALY_TABLE=anomaly_results
+      - MODEL_DIR=/workspace/models
+      - LOOKBACK_HOURS=24
+      - ALPHA=100.0
+      - BETA=0.1
+      - WORKER_INTERVAL_SECONDS=60
+    volumes:
+      - ./:/workspace
+      - ../models:/workspace/models
+    depends_on:
+      localstack:
+        condition: service_healthy
+      anomaly-app:
+        condition: service_started

@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: localstack-springboot
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  aws:
+    region: us-east-1
+    endpoint: http://localhost:4566
+    access-key: test
+    secret-key: test
+  anomaly:
+    alpha: 100.0
+    beta: 0.1
+    sigma-multiplier: 3.0
+    lookback-hours: 24
+    min-points: 12
+    aggregation-interval: PT1H
+    metrics-table: service_metrics_aggregated
+    anomaly-table: anomaly_results
+    alert-topic-name: anomaly-alerts-topic
+    alert-queue-name: anomaly-alerts-queue
+    admin-alert-email: ${ADMIN_ALERT_EMAIL:admin@example.com}
+    alert-consumer-enabled: ${ALERT_CONSUMER_ENABLED:true}
+    alert-consumer-fixed-delay-ms: ${ALERT_CONSUMER_FIXED_DELAY_MS:5000}
+    pipeline-mode: hybrid
+    python-executable: python
+    python-script-path: python/autoencoder_inference_localstack.py
+    model-dir: ../models
+    simulation-batch-size: 8
+    simulation-fixed-delay-ms: 5000
+    simulation-anomaly-seed-file: ../output/anomalies.json
+    simulation-enabled-by-default: false
+    detection-stride-buckets: 24
+  scheduler:
+    fixed-delay-ms: 30000

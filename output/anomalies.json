@@ -1,0 +1,76 @@
+[
+  {
+    "client_id": "client_a@siemens.com",
+    "status": "ANOMALY",
+    "anomalies": [
+      {
+        "time_block": "2024-12-30T11:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "MISSING_DATA",
+        "severity": "HIGH"
+      }
+    ]
+  },
+  {
+    "client_id": "client_b@siemens.com",
+    "status": "ANOMALY",
+    "anomalies": [
+      {
+        "time_block": "2024-12-29T14:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "MISSING_DATA",
+        "severity": "HIGH"
+      },
+      {
+        "time_block": "2024-12-29T16:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "MISSING_DATA",
+        "severity": "HIGH"
+      }
+    ]
+  },
+  {
+    "client_id": "client_c@siemens.com",
+    "status": "ANOMALY",
+    "anomalies": [
+      {
+        "time_block": "2024-12-29T14:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "MISSING_DATA",
+        "severity": "HIGH"
+      },
+      {
+        "time_block": "2024-12-30T11:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "USAGE_PATTERN_DEVIATION",
+        "score": 1.148844116584832,
+        "threshold": 1.1308350122295627,
+        "severity": "MEDIUM"
+      },
+      {
+        "time_block": "2024-12-30T13:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "USAGE_PATTERN_DEVIATION",
+        "score": 1.1325700953027131,
+        "threshold": 1.1308350122295627,
+        "severity": "MEDIUM"
+      },
+      {
+        "time_block": "2024-12-30T18:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "USAGE_PATTERN_DEVIATION",
+        "score": 1.3876050084286498,
+        "threshold": 1.1308350122295627,
+        "severity": "MEDIUM"
+      },
+      {
+        "time_block": "2024-12-30T19:00:00+00:00",
+        "window_type": "h",
+        "anomaly_type": "USAGE_PATTERN_DEVIATION",
+        "score": 1.3818476369566257,
+        "threshold": 1.1308350122295627,
+        "severity": "MEDIUM"
+      }
+    ]
+  }
+]
