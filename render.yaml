@@ -1,0 +1,71 @@
+services:
+  - type: pserv
+    name: localstack
+    runtime: docker
+    rootDir: localstack-springboot
+    dockerfilePath: ./Dockerfile.localstack
+    envVars:
+      - key: SERVICES
+        value: dynamodb,sns,sqs
+      - key: AWS_DEFAULT_REGION
+        value: us-east-1
+      - key: DEBUG
+        value: "1"
+
+  - type: web
+    name: anomaly-app
+    runtime: docker
+    rootDir: localstack-springboot
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: local
+      - key: APP_AWS_REGION
+        value: us-east-1
+      - key: APP_AWS_ACCESS_KEY
+        value: test
+      - key: APP_AWS_SECRET_KEY
+        value: test
+      - key: APP_AWS_ENDPOINT
+        value: http://localstack:4566
+      - key: APP_ANOMALY_PIPELINE_MODE
+        value: statistical
+      - key: APP_ANOMALY_SIMULATION_ENABLED_BY_DEFAULT
+        value: "false"
+      - key: ADMIN_ALERT_EMAIL
+        value: admin@example.com
+      - key: ALERT_CONSUMER_ENABLED
+        value: "true"
+      - key: ALERT_CONSUMER_FIXED_DELAY_MS
+        value: "5000"
+
+  - type: worker
+    name: autoencoder-worker
+    runtime: python
+    rootDir: localstack-springboot
+    buildCommand: pip install --no-cache-dir -r python/requirements.txt
+    startCommand: python python/run_worker.py
+    envVars:
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AWS_ACCESS_KEY_ID
+        value: test
+      - key: AWS_SECRET_ACCESS_KEY
+        value: test
+      - key: AWS_ENDPOINT_URL
+        value: http://localstack:4566
+      - key: METRICS_TABLE
+        value: service_metrics_aggregated
+      - key: ANOMALY_TABLE
+        value: anomaly_results
+      - key: MODEL_DIR
+        value: /opt/render/project/src/models
+      - key: LOOKBACK_HOURS
+        value: "24"
+      - key: ALPHA
+        value: "100.0"
+      - key: BETA
+        value: "0.1"
+      - key: WORKER_INTERVAL_SECONDS
+        value: "60"

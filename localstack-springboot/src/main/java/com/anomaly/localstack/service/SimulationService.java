@@ -175,7 +175,7 @@ public class SimulationService {
 
     private RawMetric createMetric(String clientId, Instant timestamp) {
         int weight = anomalyWeights.getOrDefault(clientId, 1);
-        double anomalyProbability = Math.min(0.03 + (0.015 * weight), 0.18);
+        double anomalyProbability = Math.min(0.08 + (0.025 * weight), 0.35);
         boolean usageAnomaly = random.nextDouble() < anomalyProbability;
 
         long requestCount;
@@ -184,19 +184,26 @@ public class SimulationService {
 
         if (usageAnomaly) {
             boolean burstPattern = random.nextBoolean();
+            boolean severeSpike = random.nextDouble() < 0.45;
             if (burstPattern) {
-                requestCount = 3500 + random.nextInt(5500);
-                errorCount = (long) Math.max(1, requestCount * (0.06 + random.nextDouble() * 0.08));
-                latency = 180 + random.nextDouble() * 260;
+                requestCount = 5500 + random.nextInt(5000);
+                errorCount = (long) Math.max(1, requestCount * (0.10 + random.nextDouble() * 0.12));
+                latency = 300 + random.nextDouble() * 220;
             } else {
-                requestCount = 1300 + random.nextInt(1400);
-                errorCount = (long) Math.max(1, requestCount * (0.15 + random.nextDouble() * 0.18));
-                latency = 320 + random.nextDouble() * 420;
+                requestCount = 2200 + random.nextInt(2200);
+                errorCount = (long) Math.max(1, requestCount * (0.22 + random.nextDouble() * 0.15));
+                latency = 450 + random.nextDouble() * 320;
+            }
+
+            if (severeSpike) {
+                requestCount = Math.round(requestCount * (1.4 + random.nextDouble() * 0.6));
+                errorCount = Math.round(Math.max(errorCount, requestCount * (0.28 + random.nextDouble() * 0.20)));
+                latency = latency * (1.15 + random.nextDouble() * 0.45);
             }
         } else {
-            requestCount = 900 + random.nextInt(700);
-            errorCount = (long) Math.max(0, requestCount * (0.004 + random.nextDouble() * 0.012));
-            latency = 80 + random.nextDouble() * 55;
+            requestCount = 850 + random.nextInt(650);
+            errorCount = (long) Math.max(0, requestCount * (0.003 + random.nextDouble() * 0.009));
+            latency = 75 + random.nextDouble() * 45;
         }
 
         RawMetric metric = new RawMetric();

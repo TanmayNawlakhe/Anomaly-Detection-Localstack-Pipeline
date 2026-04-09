@@ -44,8 +44,7 @@
     <div class="card">
         <h3>Simulation Controls</h3>
         <div id="sim-status">Loading...</div>
-        <button class="ok" onclick="toggleSimulation('start')">Start Simulation</button>
-        <button class="warn" onclick="toggleSimulation('stop')">Stop Simulation</button>
+        <button id="simulation-toggle-btn" class="secondary" onclick="toggleSimulationState()">Loading...</button>
         <button class="secondary" onclick="resetSystem()">Reset Data + Fresh Start</button>
     </div>
 
@@ -115,6 +114,7 @@
     let severityChart;
     let typeChart;
     const anomalyDetailCache = new Map();
+    const expandedAnomalyRows = new Set();
 
     async function api(path, method = 'GET', body = null) {
         const options = { method, headers: { 'Content-Type': 'application/json' } };
@@ -124,7 +124,10 @@
         return response.json();
     }
 
-    async function toggleSimulation(action) {
+    async function toggleSimulationState() {
+        const button = document.getElementById('simulation-toggle-btn');
+        const isEnabled = button.dataset.enabled === 'true';
+        const action = isEnabled ? 'stop' : 'start';
         await api(`/api/v1/simulation/${action}`, 'POST');
         await refresh();
     }
@@ -167,11 +170,39 @@
         return detail;
     }
 
+    async function populateAnomalyDetail(detailRow, row) {
+        const detailBox = detailRow.querySelector('.detail-box');
+        detailBox.textContent = 'Loading details...';
+
+        try {
+            const detail = await getAnomalyDetail(row.clientId, row.timeblock);
+            const detailPayload = {
+                anomaly: row,
+                matching_aggregated_metric: detail.matching_aggregated_metric || null
+            };
+            detailBox.textContent = JSON.stringify(detailPayload, null, 2);
+        } catch (error) {
+            detailBox.textContent = JSON.stringify({
+                anomaly: row,
+                matching_aggregated_metric: null,
+                error: String(error)
+            }, null, 2);
+        }
+    }
+
     function renderAnomalyTable(summary) {
         const anomaliesBody = document.getElementById('anomalies-body');
         anomaliesBody.innerHTML = '';
 
+        const visibleRowKeys = new Set(summary.latest_anomalies.map(row => `${row.clientId}|${row.timeblock}`));
+        Array.from(expandedAnomalyRows).forEach(key => {
+            if (!visibleRowKeys.has(key)) {
+                expandedAnomalyRows.delete(key);
+            }
+        });
+
         summary.latest_anomalies.forEach((row, index) => {
+            const rowKey = `${row.clientId}|${row.timeblock}`;
             const mainRow = document.createElement('tr');
             mainRow.className = 'anomaly-row';
             mainRow.innerHTML = `<td>${row.clientId}</td><td>${row.timeblock}</td><td>${row.anomalyType}</td><td>${row.severity}</td><td>${Number(row.score).toFixed(4)}</td><td>${Number(row.threshold).toFixed(4)}</td>`;
@@ -185,31 +216,22 @@
             mainRow.addEventListener('click', async () => {
                 if (detailRow.style.display !== 'none') {
                     detailRow.style.display = 'none';
+                    expandedAnomalyRows.delete(rowKey);
                     return;
                 }
 
                 detailRow.style.display = '';
-                const detailBox = detailRow.querySelector('.detail-box');
-                detailBox.textContent = 'Loading details...';
-
-                try {
-                    const detail = await getAnomalyDetail(row.clientId, row.timeblock);
-                    const detailPayload = {
-                        anomaly: row,
-                        matching_aggregated_metric: detail.matching_aggregated_metric || null
-                    };
-                    detailBox.textContent = JSON.stringify(detailPayload, null, 2);
-                } catch (error) {
-                    detailBox.textContent = JSON.stringify({
-                        anomaly: row,
-                        matching_aggregated_metric: null,
-                        error: String(error)
-                    }, null, 2);
-                }
+                expandedAnomalyRows.add(rowKey);
+                await populateAnomalyDetail(detailRow, row);
             });
 
             anomaliesBody.appendChild(mainRow);
             anomaliesBody.appendChild(detailRow);
+
+            if (expandedAnomalyRows.has(rowKey)) {
+                detailRow.style.display = '';
+                populateAnomalyDetail(detailRow, row);
+            }
         });
     }
 
@@ -257,6 +279,16 @@
             <div class="status-line">Last detection bucket: ${summary.last_detection_bucket}</div>
             <div class="status-line">Latest observed bucket: ${summary.latest_observed_bucket}</div>
         `;
+
+        const toggleButton = document.getElementById('simulation-toggle-btn');
+        toggleButton.dataset.enabled = String(sim.enabled);
+        if (sim.enabled) {
+            toggleButton.innerText = 'Stop Simulation';
+            toggleButton.className = 'warn';
+        } else {
+            toggleButton.innerText = 'Start Simulation';
+            toggleButton.className = 'ok';
+        }
 
         const rawMetricsBody = document.getElementById('raw-metrics-body');
         rawMetricsBody.innerHTML = '';

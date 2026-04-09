@@ -1,0 +1,4 @@
+FROM localstack/localstack:3.8
+
+COPY render/init-resources.sh /etc/localstack/init/ready.d/init-resources.sh
+RUN chmod +x /etc/localstack/init/ready.d/init-resources.sh
