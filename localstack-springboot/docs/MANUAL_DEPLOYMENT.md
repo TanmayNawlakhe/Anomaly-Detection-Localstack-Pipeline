@@ -59,20 +59,17 @@ In `docker-compose.yml`, models are mounted from host filesystem into containers
 
 So yes: for local runtime, external model folder is already handled via bind mounts.
 
-## 4.2 Render blueprint behavior (current)
-In `render.yaml`, worker uses:
-- `MODEL_DIR=/opt/render/project/src/models`
+## 4.2 Render app-only behavior (current)
+Current `render.yaml` deploys only `anomaly-app` (web service).
 
-This means models must exist in the deployed source tree at repo path `models/`.
+`autoencoder-worker` stays local in this model, so model loading happens on your laptop runtime via:
+- local worker mount: `../models:/workspace/models`
+- local worker env: `MODEL_DIR=/workspace/models`
 
-So for Render, current setup assumes one of these:
-1. `models/` is committed in repo, or
-2. build/start step populates that folder before worker starts.
+Result: Render app does not need model files; your local worker does.
 
-If models are not present there, worker runs but cannot load client artifacts.
-
-## 4.3 If you want models outside containers on Render
-Use one of these patterns:
+## 4.3 If you later move worker to cloud
+If you deploy worker remotely later, use one of these patterns for model artifacts:
 - **Object storage pull on startup** (recommended): download model files from S3/R2/GCS into a local directory, then set `MODEL_DIR` to that path.
 - **Bake models into a custom worker image**: simple, but model updates require rebuilding image.
 - **Model registry fetch**: cleanest for versioning/governance.
@@ -82,22 +79,23 @@ Use one of these patterns:
 ## 5) Render deployment (current files)
 
 Repo includes:
-- `render.yaml` (3 services)
-- `localstack-springboot/Dockerfile.localstack`
-- `localstack-springboot/render/init-resources.sh` (auto-creates DynamoDB/SNS/SQS resources)
+- `render.yaml` (app-only web service)
 
 Deploy steps:
 1. Push repo changes to GitHub.
 2. In Render, create Blueprint from repo root.
-3. Deploy all services.
-4. Verify app health endpoint and dashboard API.
+3. Deploy `anomaly-app` service.
+4. In Render env vars, set `APP_AWS_ENDPOINT` to your tunnel URL for local LocalStack.
+5. Redeploy and verify app health + dashboard API.
 
 ---
 
 ## 6) Troubleshooting
 
 - App logs show resources not ready:
-  - Ensure LocalStack service is healthy and init script ran.
+  - Ensure local `localstack` is healthy.
+  - Ensure local Terraform was applied (`.\scripts\terraform-up.ps1`).
+  - Ensure tunnel URL is active and set in Render `APP_AWS_ENDPOINT`.
 - No ML anomalies appearing:
   - Confirm worker is running.
   - Confirm `MODEL_DIR` path contains per-client files: `model.keras`, `scaler.pkl`, `config.pkl`.
